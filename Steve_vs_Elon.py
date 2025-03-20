@@ -4,22 +4,27 @@ import os
 import time
 from groq import Groq
 
-# Load environment variables
 dotenv.load_dotenv()
 
-# Initialize Groq API client
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # Define AI personalities
 system_prompts = {
-    'Steve Jobs': 'You are Apple’s founder Steve Jobs. Respond to all questions as him, incorporating his mannerisms, knowledge of Apple, and his vision for the future. Keep responses within about 100 words and after every response, ask a question to the other bot which would escalate the debate.', 
-    'Elon Musk': 'You are American entrepreneur Elon Musk. Respond to all questions as him, incorporating his mannerisms, knowledge of Tesla and SpaceX, and his vision for the future. Keep responses within about 100 words and after every response, ask a question to the other bot which would escalate the debate.'
+    'Steve Jobs': (
+        "You are Apple’s founder Steve Jobs. Respond to all questions as him, "
+        "incorporating his mannerisms, knowledge of Apple, and his vision for the future. "
+        "Keep responses within about 100 words and after every response, ask a question to the other bot which would escalate the debate."
+    ),
+    'Elon Musk': (
+        "You are American entrepreneur Elon Musk. Respond to all questions as him, "
+        "incorporating his mannerisms, knowledge of Tesla and SpaceX, and his vision for the future. "
+        "Keep responses within about 100 words and after every response, ask a question to the other bot which would escalate the debate."
+    )
 }
 
 # Initialize Streamlit session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
 if "context" not in st.session_state:
     st.session_state.context = {"Steve Jobs": "", "Elon Musk": ""}
 
@@ -29,7 +34,6 @@ def get_bot_response(question: str, bot_type: str) -> str:
         model = "llama-3.3-70b-versatile"
         system_content = system_prompts[bot_type]
         context = st.session_state.context[bot_type]
-
         response = groq_client.chat.completions.create(
             model=model,
             messages=[
@@ -39,7 +43,6 @@ def get_bot_response(question: str, bot_type: str) -> str:
             temperature=0.7,
             max_tokens=150
         )
-
         return response.choices[0].message.content
     except Exception as e:
         return f"Error generating response: {str(e)}"
@@ -50,8 +53,8 @@ def typewriter_effect(text, display_area):
     displayed_text = ""
     for word in words:
         displayed_text += word + " "
-        display_area.write(displayed_text)  # Update displayed text
-        time.sleep(0.1)  # Delay to create typewriter effect
+        display_area.write(displayed_text)
+        time.sleep(0.1)
 
 def judge_debate():
     """Evaluates and judges the debate."""
@@ -74,7 +77,7 @@ def judge_debate():
     Declare the winner and explain in 3 lines why they won.
 
     Format:
-    Winner: <Steve Jobs or Elon Musk>\n
+    Winner: <Steve Jobs or Elon Musk>
     Explanation: <Three-line explanation>
     """
 
@@ -105,39 +108,63 @@ def main():
     question = "Who has contributed more to the greater advancement of technology in society?"
     st.subheader(f"Debate Topic: {question}")
 
-    # Only start the debate when the user clicks "Start Debate"
     if st.button("Start Debate"):
-        st.session_state.messages = []  # Reset previous messages
+        st.session_state.messages = []
+        st.session_state.context = {"Steve Jobs": "", "Elon Musk": ""}
+        last_speaker = None  # To track the last bot that responded
 
-        for i in range(4):  # Limit rounds to avoid excessive API calls
+        rounds = 3  # Number of debate rounds
+        for i in range(rounds):
+            # Steve Jobs responds
             role = "Steve Jobs"
             response = get_bot_response(question, role)
             st.session_state.messages.append({"role": role, "content": response})
             st.session_state.context[role] += response + " "
-
-            # Displaying with typewriter effect
+            last_speaker = role  # Update last speaker
             st.subheader(f"**{role}:**")
             display_area = st.empty()
             typewriter_effect(response, display_area)
+            
+            question = response
 
-            # Pass response as next question
-            question = response  
-
+            # Elon Musk responds
             role = "Elon Musk"
             response = get_bot_response(question, role)
             st.session_state.messages.append({"role": role, "content": response})
             st.session_state.context[role] += response + " "
-
-            # Displaying with typewriter effect
+            last_speaker = role  # Update last speaker
             st.subheader(f"**{role}:**")
             display_area = st.empty()
             typewriter_effect(response, display_area)
+            
+            question = response
 
-            # Pass response as next question
-            question = response  
+        # After the debate rounds, determine which bot must provide the closing statement.
+        if last_speaker == "Steve Jobs":
+            final_role = "Elon Musk"
+            final_prompt = (
+                "Steve Jobs posed a final question. "
+                "Please provide your closing statement that summarizes your position and includes no further questions to conclude the debate."
+            )
+        elif last_speaker == "Elon Musk":
+            final_role = "Steve Jobs"
+            final_prompt = (
+                "Elon Musk posed a final question. "
+                "Please provide your closing statement that summarizes your position and includes no further questions to conclude the debate."
+            )
+        else:
+            final_role = None
 
-    # Display chat history in Streamlit UI
-    if len(st.session_state.messages) > 0:
+        if final_role:
+            final_response = get_bot_response(final_prompt, final_role)
+            st.session_state.messages.append({"role": final_role, "content": final_response})
+            st.session_state.context[final_role] += final_response + " "
+            st.subheader(f"**{final_role}:**")
+            display_area = st.empty()
+            typewriter_effect(final_response, display_area)
+
+    # Display the complete debate transcript
+    if st.session_state.messages:
         st.subheader("Debate Transcript")
         with st.container():
             for message in st.session_state.messages:
